@@ -1,0 +1,345 @@
+{
+  "name": "Generador de Orden de Compra",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "orden-compra",
+        "options": {
+          "binaryData": true
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "node-webhook-001",
+      "name": "Webhook Entrada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "orden-compra-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Detectar tipo de entrada: PDF, Excel, Imagen o Texto\nconst item = $input.first();\nconst binaryData = item.binary || {};\nconst binaryKeys = Object.keys(binaryData);\n\nlet fileType = 'text';\nlet mimeType = '';\nlet fileName = '';\nlet binaryKey = null;\n\nif (binaryKeys.length > 0) {\n  binaryKey = binaryKeys[0];\n  const binEntry = binaryData[binaryKey];\n  mimeType = binEntry.mimeType || '';\n  fileName = binEntry.fileName || binEntry.fileExtension || '';\n  const nameLower = fileName.toLowerCase();\n\n  if (mimeType.includes('pdf') || nameLower.endsWith('.pdf')) {\n    fileType = 'pdf';\n  } else if (\n    mimeType.includes('spreadsheet') ||\n    mimeType.includes('excel') ||\n    mimeType.includes('csv') ||\n    nameLower.endsWith('.xlsx') ||\n    nameLower.endsWith('.xls') ||\n    nameLower.endsWith('.csv')\n  ) {\n    fileType = 'excel';\n  } else if (\n    mimeType.startsWith('image/') ||\n    nameLower.match(/\\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/)\n  ) {\n    fileType = 'image';\n  } else {\n    // Otros documentos (Word, txt, etc.) → tratar como doc\n    fileType = 'doc';\n  }\n}\n\nreturn [{\n  json: {\n    ...item.json,\n    fileType,\n    mimeType,\n    fileName,\n    binaryKey,\n    hasFile: binaryKeys.length > 0\n  },\n  binary: item.binary\n}];"
+      },
+      "id": "node-detect-001",
+      "name": "Detectar Tipo de Entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileType }}",
+                    "rightValue": "pdf",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileType }}",
+                    "rightValue": "excel",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Excel"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileType }}",
+                    "rightValue": "image",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Imagen"
+            }
+          ]
+        },
+        "fallbackOutput": "extra",
+        "options": {}
+      },
+      "id": "node-switch-001",
+      "name": "Rutear por Tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "={{ $json.binaryKey || 'file' }}",
+        "options": {}
+      },
+      "id": "node-extract-pdf-001",
+      "name": "Extraer Texto PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [920, 180]
+    },
+    {
+      "parameters": {
+        "operation": "spreadsheet",
+        "binaryPropertyName": "={{ $json.binaryKey || 'file' }}",
+        "options": {
+          "rawData": false,
+          "readAsString": false
+        }
+      },
+      "id": "node-extract-xls-001",
+      "name": "Extraer Datos Excel",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [920, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar imagen en base64 para Claude Vision\nconst item = $input.first();\nconst binaryKey = item.json.binaryKey || Object.keys(item.binary || {})[0];\nconst bin = item.binary[binaryKey];\n\nreturn [{\n  json: {\n    imageBase64: bin.data,\n    imageMimeType: bin.mimeType || 'image/jpeg',\n    fileType: 'image'\n  }\n}];"
+      },
+      "id": "node-prep-img-001",
+      "name": "Preparar Imagen Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 540]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2048, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: $json.imageMimeType, data: $json.imageBase64 } }, { type: 'text', text: 'Extrae y transcribe TODO el contenido de esta imagen. Incluye: datos del proveedor/vendedor, datos del comprador, todos los productos o servicios con sus precios, cantidades, unidades, descuentos, totales, condiciones de pago, plazos de entrega, y cualquier información relevante para generar una orden de compra. Si es una cotización o factura, extrae todos los datos. Responde solo con el texto extraído.' }] }] }) }}"
+      },
+      "id": "node-claude-vision-001",
+      "name": "Claude Vision - Leer Imagen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 540],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "claude-api-credentials",
+          "name": "Anthropic API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizar salida del PDF\nconst item = $input.first();\nconst text = item.json.text || item.json.content || JSON.stringify(item.json);\nreturn [{ json: { extractedContent: text.trim(), sourceType: 'PDF' } }];"
+      },
+      "id": "node-norm-pdf-001",
+      "name": "Normalizar Contenido PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizar salida del Excel/CSV\nconst items = $input.all();\nconst rows = items.map(i => i.json);\nconst text = JSON.stringify(rows, null, 2);\nreturn [{ json: { extractedContent: text, sourceType: 'Excel/CSV' } }];"
+      },
+      "id": "node-norm-xls-001",
+      "name": "Normalizar Contenido Excel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizar respuesta de Claude Vision\nconst item = $input.first();\nconst content = item.json?.content?.[0]?.text\n  || (Array.isArray(item.json?.content) ? item.json.content.map(c => c.text || '').join('\\n') : '')\n  || item.json?.content\n  || '';\nreturn [{ json: { extractedContent: content.trim(), sourceType: 'Imagen' } }];"
+      },
+      "id": "node-norm-img-001",
+      "name": "Normalizar Contenido Imagen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizar texto libre o documento sin formato especial\nconst item = $input.first();\nconst body = item.json;\n\n// Intentar extraer el texto de múltiples fuentes posibles\nconst text =\n  body.texto ||\n  body.text ||\n  body.contenido ||\n  body.content ||\n  body.data ||\n  body.body?.texto ||\n  body.body?.text ||\n  body.query?.texto ||\n  body.query?.text ||\n  '';\n\nreturn [{ json: { extractedContent: text.trim(), sourceType: 'Texto' } }];"
+      },
+      "id": "node-norm-text-001",
+      "name": "Normalizar Texto Directo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  max_tokens: 4096,\n  system: 'Eres un experto en generar órdenes de compra formales en español latinoamericano. Tu tarea es analizar el contenido provisto y generar una orden de compra estructurada y completa. IMPORTANTE: Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de código markdown, solo el JSON puro. Usa la siguiente estructura exacta:\\n{\\n  \"numero\": \"OC-YYYYMMDD-001\",\\n  \"fecha\": \"YYYY-MM-DD\",\\n  \"proveedor\": {\\n    \"nombre\": \"\",\\n    \"rut\": \"\",\\n    \"direccion\": \"\",\\n    \"telefono\": \"\",\\n    \"email\": \"\",\\n    \"contacto\": \"\"\\n  },\\n  \"comprador\": {\\n    \"empresa\": \"\",\\n    \"departamento\": \"\",\\n    \"solicitadoPor\": \"\",\\n    \"email\": \"\"\\n  },\\n  \"items\": [\\n    {\\n      \"linea\": 1,\\n      \"codigo\": \"\",\\n      \"descripcion\": \"\",\\n      \"cantidad\": 0,\\n      \"unidad\": \"UN\",\\n      \"precioUnitario\": 0,\\n      \"descuento\": 0,\\n      \"total\": 0\\n    }\\n  ],\\n  \"subtotal\": 0,\\n  \"descuentoTotal\": 0,\\n  \"iva\": 0,\\n  \"porcentajeIva\": 19,\\n  \"total\": 0,\\n  \"moneda\": \"CLP\",\\n  \"condicionesPago\": \"\",\\n  \"tiempoEntrega\": \"\",\\n  \"lugarEntrega\": \"\",\\n  \"validezOferta\": \"\",\\n  \"notas\": \"\"\\n}\\nSi un dato no está disponible, usa null. Genera el número de OC con la fecha actual. Calcula correctamente subtotales, IVA (19% si es Chile, sino 0%) y totales.',\n  messages: [{\n    role: 'user',\n    content: 'Fuente del documento: ' + $json.sourceType + '\\n\\nContenido extraído:\\n\\n' + $json.extractedContent\n  }]\n}) }}"
+      },
+      "id": "node-claude-oc-001",
+      "name": "Claude - Generar Orden de Compra",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "claude-api-credentials",
+          "name": "Anthropic API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear respuesta de Claude y generar HTML de la OC\nconst item = $input.first();\n\n// Extraer texto de la respuesta de Claude\nlet rawText = '';\nif (item.json?.content?.[0]?.text) {\n  rawText = item.json.content[0].text;\n} else if (item.json?.content) {\n  rawText = Array.isArray(item.json.content)\n    ? item.json.content.map(c => c.text || '').join('')\n    : String(item.json.content);\n}\n\n// Parsear el JSON de la OC\nlet oc;\ntry {\n  // Limpiar posibles bloques de código markdown\n  const cleaned = rawText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  oc = JSON.parse(cleaned);\n} catch (e) {\n  return [{\n    json: {\n      success: false,\n      error: 'No se pudo parsear la respuesta: ' + e.message,\n      rawResponse: rawText\n    }\n  }];\n}\n\n// Formatear números\nconst fmt = (n) => {\n  if (n == null) return '0';\n  return new Intl.NumberFormat('es-CL').format(n);\n};\n\n// Generar HTML\nconst itemsHTML = (oc.items || []).map((item, i) => `\n  <tr>\n    <td>${item.linea || i + 1}</td>\n    <td>${item.codigo || ''}</td>\n    <td>${item.descripcion || ''}</td>\n    <td style=\"text-align:center\">${item.cantidad || 0}</td>\n    <td style=\"text-align:center\">${item.unidad || 'UN'}</td>\n    <td style=\"text-align:right\">${fmt(item.precioUnitario)}</td>\n    <td style=\"text-align:center\">${item.descuento || 0}%</td>\n    <td style=\"text-align:right\">${fmt(item.total)}</td>\n  </tr>`).join('');\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <title>Orden de Compra ${oc.numero || ''}</title>\n  <style>\n    * { box-sizing: border-box; }\n    body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }\n    .header { display: flex; justify-content: space-between; margin-bottom: 20px; }\n    .title { font-size: 24px; font-weight: bold; color: #1a3a6b; }\n    .oc-number { font-size: 18px; color: #1a3a6b; }\n    .section { margin-bottom: 16px; }\n    .section-title { font-size: 13px; font-weight: bold; background: #1a3a6b; color: white; padding: 4px 8px; margin-bottom: 8px; }\n    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }\n    .info-row { display: flex; gap: 6px; }\n    .info-label { font-weight: bold; min-width: 120px; }\n    table { width: 100%; border-collapse: collapse; }\n    th { background: #1a3a6b; color: white; padding: 6px 8px; text-align: left; }\n    td { padding: 5px 8px; border-bottom: 1px solid #ddd; }\n    tr:nth-child(even) { background: #f5f7fa; }\n    .totals { width: 300px; margin-left: auto; margin-top: 12px; }\n    .totals td { padding: 4px 8px; }\n    .totals .total-row { font-weight: bold; font-size: 14px; background: #1a3a6b; color: white; }\n    .footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }\n    .badge { display: inline-block; background: #e8f0fe; color: #1a3a6b; padding: 2px 8px; border-radius: 4px; font-weight: bold; }\n  </style>\n</head>\n<body>\n  <div class=\"header\">\n    <div>\n      <div class=\"title\">ORDEN DE COMPRA</div>\n      <div class=\"oc-number\">${oc.numero || 'N/A'}</div>\n      <div>Fecha: <strong>${oc.fecha || 'N/A'}</strong></div>\n    </div>\n    <div style=\"text-align:right\">\n      <div>Moneda: <span class=\"badge\">${oc.moneda || 'CLP'}</span></div>\n      ${oc.validezOferta ? `<div style=\"margin-top:4px\">Validez: ${oc.validezOferta}</div>` : ''}\n    </div>\n  </div>\n\n  <div style=\"display:grid; grid-template-columns:1fr 1fr; gap:16px\">\n    <div class=\"section\">\n      <div class=\"section-title\">PROVEEDOR</div>\n      <div class=\"info-grid\">\n        <div class=\"info-row\"><span class=\"info-label\">Nombre:</span> ${oc.proveedor?.nombre || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">RUT:</span> ${oc.proveedor?.rut || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Dirección:</span> ${oc.proveedor?.direccion || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Teléfono:</span> ${oc.proveedor?.telefono || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Email:</span> ${oc.proveedor?.email || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Contacto:</span> ${oc.proveedor?.contacto || 'N/A'}</div>\n      </div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-title\">COMPRADOR</div>\n      <div class=\"info-grid\">\n        <div class=\"info-row\"><span class=\"info-label\">Empresa:</span> ${oc.comprador?.empresa || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Departamento:</span> ${oc.comprador?.departamento || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Solicitado por:</span> ${oc.comprador?.solicitadoPor || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Email:</span> ${oc.comprador?.email || 'N/A'}</div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"section\">\n    <div class=\"section-title\">DETALLE DE PRODUCTOS / SERVICIOS</div>\n    <table>\n      <thead>\n        <tr>\n          <th>#</th>\n          <th>Código</th>\n          <th>Descripción</th>\n          <th style=\"text-align:center\">Cantidad</th>\n          <th style=\"text-align:center\">Unidad</th>\n          <th style=\"text-align:right\">Precio Unit.</th>\n          <th style=\"text-align:center\">Dcto.</th>\n          <th style=\"text-align:right\">Total</th>\n        </tr>\n      </thead>\n      <tbody>${itemsHTML}</tbody>\n    </table>\n    <table class=\"totals\">\n      <tr><td>Subtotal:</td><td style=\"text-align:right\">${fmt(oc.subtotal)} ${oc.moneda || 'CLP'}</td></tr>\n      ${oc.descuentoTotal ? `<tr><td>Descuento:</td><td style=\"text-align:right\">-${fmt(oc.descuentoTotal)} ${oc.moneda || 'CLP'}</td></tr>` : ''}\n      <tr><td>IVA (${oc.porcentajeIva || 0}%):</td><td style=\"text-align:right\">${fmt(oc.iva)} ${oc.moneda || 'CLP'}</td></tr>\n      <tr class=\"total-row\"><td>TOTAL:</td><td style=\"text-align:right\">${fmt(oc.total)} ${oc.moneda || 'CLP'}</td></tr>\n    </table>\n  </div>\n\n  <div class=\"footer-grid\">\n    <div class=\"section\">\n      <div class=\"section-title\">CONDICIONES</div>\n      <div class=\"info-grid\">\n        <div class=\"info-row\"><span class=\"info-label\">Pago:</span> ${oc.condicionesPago || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Entrega:</span> ${oc.tiempoEntrega || 'N/A'}</div>\n        <div class=\"info-row\"><span class=\"info-label\">Lugar entrega:</span> ${oc.lugarEntrega || 'N/A'}</div>\n      </div>\n    </div>\n    ${oc.notas ? `<div class=\"section\"><div class=\"section-title\">NOTAS</div><p>${oc.notas}</p></div>` : ''}\n  </div>\n\n  <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px\">\n    <div style=\"text-align:center;border-top:1px solid #333;padding-top:8px\">Firma Solicitante</div>\n    <div style=\"text-align:center;border-top:1px solid #333;padding-top:8px\">Firma Autorización</div>\n  </div>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    success: true,\n    ordenDeCompra: oc,\n    htmlOrden: html\n  }\n}];"
+      },
+      "id": "node-format-001",
+      "name": "Formatear Orden de Compra",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1880, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "node-respond-001",
+      "name": "Responder al Cliente",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2120, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Entrada": {
+      "main": [
+        [{ "node": "Detectar Tipo de Entrada", "type": "main", "index": 0 }]
+      ]
+    },
+    "Detectar Tipo de Entrada": {
+      "main": [
+        [{ "node": "Rutear por Tipo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Rutear por Tipo": {
+      "main": [
+        [{ "node": "Extraer Texto PDF", "type": "main", "index": 0 }],
+        [{ "node": "Extraer Datos Excel", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Imagen Base64", "type": "main", "index": 0 }],
+        [{ "node": "Normalizar Texto Directo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extraer Texto PDF": {
+      "main": [
+        [{ "node": "Normalizar Contenido PDF", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extraer Datos Excel": {
+      "main": [
+        [{ "node": "Normalizar Contenido Excel", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Imagen Base64": {
+      "main": [
+        [{ "node": "Claude Vision - Leer Imagen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude Vision - Leer Imagen": {
+      "main": [
+        [{ "node": "Normalizar Contenido Imagen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalizar Contenido PDF": {
+      "main": [
+        [{ "node": "Claude - Generar Orden de Compra", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalizar Contenido Excel": {
+      "main": [
+        [{ "node": "Claude - Generar Orden de Compra", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalizar Contenido Imagen": {
+      "main": [
+        [{ "node": "Claude - Generar Orden de Compra", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalizar Texto Directo": {
+      "main": [
+        [{ "node": "Claude - Generar Orden de Compra", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude - Generar Orden de Compra": {
+      "main": [
+        [{ "node": "Formatear Orden de Compra", "type": "main", "index": 0 }]
+      ]
+    },
+    "Formatear Orden de Compra": {
+      "main": [
+        [{ "node": "Responder al Cliente", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "generador-orden-compra-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  },
+  "tags": [
+    { "id": "tag-compras", "name": "Compras" },
+    { "id": "tag-ai", "name": "IA" }
+  ]
+}
