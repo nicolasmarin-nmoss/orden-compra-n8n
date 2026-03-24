@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador de Orden de Compra</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f4f8;
+      margin: 0; padding: 20px;
+      color: #333;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #1a3a6b, #2d6be4);
+      color: white;
+      padding: 32px 40px;
+    }
+    .header h1 { margin: 0; font-size: 26px; }
+    .header p { margin: 8px 0 0; opacity: 0.85; font-size: 14px; }
+    .body { padding: 40px; }
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #e0e7ef;
+      margin-bottom: 28px;
+    }
+    .tab {
+      padding: 10px 24px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #6b7280;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+    .tab.active {
+      color: #1a3a6b;
+      border-bottom-color: #2d6be4;
+    }
+    .tab:hover { color: #1a3a6b; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #374151;
+    }
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border 0.2s;
+      font-family: inherit;
+    }
+    input[type="text"]:focus, textarea:focus {
+      border-color: #2d6be4;
+      box-shadow: 0 0 0 3px rgba(45, 107, 228, 0.1);
+    }
+    textarea { min-height: 180px; resize: vertical; }
+    .file-drop {
+      border: 2px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fafbfc;
+    }
+    .file-drop:hover, .file-drop.dragover {
+      border-color: #2d6be4;
+      background: #eff6ff;
+    }
+    .file-drop .icon { font-size: 40px; margin-bottom: 10px; }
+    .file-drop p { margin: 4px 0; color: #6b7280; font-size: 14px; }
+    .file-drop .formats { font-size: 12px; color: #9ca3af; margin-top: 8px; }
+    input[type="file"] { display: none; }
+    .file-selected {
+      background: #f0fdf4;
+      border-color: #22c55e;
+      color: #15803d;
+    }
+    .btn {
+      background: linear-gradient(135deg, #1a3a6b, #2d6be4);
+      color: white;
+      border: none;
+      padding: 13px 32px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 20px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.92; }
+    .btn:active { transform: scale(0.99); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .settings {
+      background: #f8fafc;
+      border: 1px solid #e0e7ef;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .settings summary { font-weight: 600; cursor: pointer; color: #374151; }
+    .settings .field { margin-top: 12px; }
+    .loader {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: #6b7280;
+    }
+    .loader .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #e0e7ef;
+      border-top-color: #2d6be4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .result {
+      display: none;
+      margin-top: 24px;
+    }
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .result-header h3 { margin: 0; color: #1a3a6b; }
+    .result-tabs { display: flex; gap: 8px; }
+    .result-tab {
+      padding: 6px 16px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      background: white;
+    }
+    .result-tab.active {
+      background: #1a3a6b;
+      color: white;
+      border-color: #1a3a6b;
+    }
+    .result-panel { display: none; }
+    .result-panel.active { display: block; }
+    #result-html-view {
+      border: 1px solid #e0e7ef;
+      border-radius: 8px;
+      padding: 0;
+      overflow: hidden;
+    }
+    #result-html-view iframe {
+      width: 100%;
+      min-height: 600px;
+      border: none;
+    }
+    #result-json-view {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      overflow: auto;
+      max-height: 500px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .success-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .download-btn {
+      background: white;
+      color: #1a3a6b;
+      border: 2px solid #1a3a6b;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+    .download-btn:hover { background: #eff6ff; }
+    .print-btn {
+      background: #1a3a6b;
+      color: white;
+      border: 2px solid #1a3a6b;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+    .print-btn:hover { background: #14305a; border-color: #14305a; }
+    .example-text {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 6px;
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      border-left: 3px solid #2d6be4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🧾 Generador de Orden de Compra</h1>
+      <p>Sube un archivo (PDF, Excel, imagen) o ingresa texto con la información de la cotización</p>
+    </div>
+    <div class="body">
+
+      <!-- Configuración del endpoint -->
+      <details class="settings">
+        <summary>⚙️ Configuración del Webhook</summary>
+        <div class="field">
+          <label>URL del Webhook n8n</label>
+          <input type="text" id="webhook-url"
+            value="http://localhost:5678/webhook/orden-compra"
+            placeholder="https://tu-instancia-n8n.com/webhook/orden-compra">
+        </div>
+      </details>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('file')">📎 Subir Archivo</div>
+        <div class="tab" onclick="switchTab('text')">📝 Ingresar Texto</div>
+      </div>
+
+      <!-- Panel: Archivo -->
+      <div id="panel-file" class="panel active">
+        <div class="file-drop" id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <div class="icon">📄</div>
+          <p><strong>Haz clic para seleccionar un archivo</strong></p>
+          <p>o arrastra y suelta aquí</p>
+          <div class="formats">PDF · Excel (.xlsx, .xls) · CSV · Imagen (JPG, PNG, etc.)</div>
+        </div>
+        <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.tiff">
+        <button class="btn" id="btn-file" onclick="generateFromFile()">Generar Orden de Compra</button>
+      </div>
+
+      <!-- Panel: Texto -->
+      <div id="panel-text" class="panel">
+        <label>Información de la cotización o pedido</label>
+        <textarea id="text-input" placeholder="Ingresa aquí los datos de la cotización. Por ejemplo:
+
+Proveedor: Tecnología Total SpA
+RUT: 76.543.210-K
+Dirección: Av. Providencia 1234, Santiago
+Contacto: contacto@tecnologiatotal.cl
+
+Productos:
+- 5 Laptops Dell Latitude 5540, $850.000 c/u
+- 10 Mouses Logitech M305, $25.000 c/u
+- 10 Teclados Logitech K380, $35.000 c/u
+
+Plazo de entrega: 7 días hábiles
+Condiciones de pago: 30 días
+Lugar de entrega: Nuestra bodega central
+Validez de la oferta: 15 días"></textarea>
+        <div class="example-text">
+          💡 Puedes ingresar la información en cualquier formato: lista, párrafo, tabla de texto, etc. La IA interpretará los datos automáticamente.
+        </div>
+        <button class="btn" id="btn-text" onclick="generateFromText()">Generar Orden de Compra</button>
+      </div>
+
+      <!-- Loader -->
+      <div class="loader" id="loader">
+        <div class="spinner"></div>
+        <p>Procesando documento y generando orden de compra...</p>
+        <p style="font-size:12px">La IA está analizando el contenido, esto puede tomar unos segundos.</p>
+      </div>
+
+      <!-- Resultado -->
+      <div class="result" id="result">
+        <div class="result-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <h3>Orden de Compra Generada</h3>
+            <span class="success-badge">✓ Completado</span>
+          </div>
+          <div style="display:flex;align-items:center">
+            <button class="download-btn" onclick="downloadHTML()">⬇ Descargar HTML</button>
+            <button class="download-btn" onclick="downloadJSON()">⬇ Descargar JSON</button>
+            <button class="print-btn" onclick="printOrden()">🖨 Imprimir / PDF</button>
+          </div>
+        </div>
+        <div class="result-tabs">
+          <button class="result-tab active" onclick="switchResultTab('html')">Vista Previa</button>
+          <button class="result-tab" onclick="switchResultTab('json')">JSON</button>
+        </div>
+        <div id="result-html-panel" class="result-panel active">
+          <div id="result-html-view">
+            <iframe id="html-frame" sandbox="allow-same-origin"></iframe>
+          </div>
+        </div>
+        <div id="result-json-panel" class="result-panel">
+          <pre id="result-json-view"></pre>
+        </div>
+      </div>
+
+      <div class="error-box" id="error-box" style="display:none">
+        <strong>Error:</strong> <span id="error-msg"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let lastResponse = null;
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('panel-' + tab).classList.add('active');
+    }
+
+    function switchResultTab(tab) {
+      document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('result-' + tab + '-panel').classList.add('active');
+    }
+
+    // Drag and drop
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        fileInput.files = e.dataTransfer.files;
+        updateDropZone(file);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) updateDropZone(fileInput.files[0]);
+    });
+
+    function updateDropZone(file) {
+      const size = (file.size / 1024).toFixed(1);
+      dropZone.classList.add('file-selected');
+      dropZone.innerHTML = `
+        <div class="icon">✅</div>
+        <p><strong>${file.name}</strong></p>
+        <p style="font-size:12px;color:#15803d">${size} KB · Listo para procesar</p>
+        <div class="formats" style="margin-top:8px"><a href="#" onclick="clearFile(event)">Cambiar archivo</a></div>
+      `;
+    }
+
+    function clearFile(e) {
+      e.stopPropagation();
+      fileInput.value = '';
+      dropZone.classList.remove('file-selected');
+      dropZone.innerHTML = `
+        <div class="icon">📄</div>
+        <p><strong>Haz clic para seleccionar un archivo</strong></p>
+        <p>o arrastra y suelta aquí</p>
+        <div class="formats">PDF · Excel (.xlsx, .xls) · CSV · Imagen (JPG, PNG, etc.)</div>
+      `;
+    }
+
+    function showLoading(show) {
+      document.getElementById('loader').style.display = show ? 'block' : 'none';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('error-box').style.display = 'none';
+      document.getElementById('btn-file').disabled = show;
+      document.getElementById('btn-text').disabled = show;
+    }
+
+    function showError(msg) {
+      document.getElementById('error-box').style.display = 'block';
+      document.getElementById('error-msg').textContent = msg;
+    }
+
+    function showResult(data) {
+      lastResponse = data;
+      document.getElementById('result').style.display = 'block';
+
+      // JSON view
+      document.getElementById('result-json-view').textContent =
+        JSON.stringify(data.ordenDeCompra || data, null, 2);
+
+      // HTML view
+      const iframe = document.getElementById('html-frame');
+      const htmlContent = data.htmlOrden || '<p>No se generó vista HTML.</p>';
+      iframe.srcdoc = htmlContent;
+    }
+
+    async function generateFromFile() {
+      const file = fileInput.files[0];
+      if (!file) {
+        showError('Por favor selecciona un archivo primero.');
+        return;
+      }
+
+      const webhookUrl = document.getElementById('webhook-url').value.trim();
+      if (!webhookUrl) {
+        showError('Por favor configura la URL del webhook.');
+        return;
+      }
+
+      showLoading(true);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const err = await response.text();
+          throw new Error(`HTTP ${response.status}: ${err}`);
+        }
+
+        const data = await response.json();
+        showLoading(false);
+
+        if (data.success === false) {
+          showError(data.error || 'Error desconocido en el servidor.');
+        } else {
+          showResult(data);
+        }
+      } catch (err) {
+        showLoading(false);
+        showError(err.message);
+      }
+    }
+
+    async function generateFromText() {
+      const text = document.getElementById('text-input').value.trim();
+      if (!text) {
+        showError('Por favor ingresa el texto con la información de la cotización.');
+        return;
+      }
+
+      const webhookUrl = document.getElementById('webhook-url').value.trim();
+      if (!webhookUrl) {
+        showError('Por favor configura la URL del webhook.');
+        return;
+      }
+
+      showLoading(true);
+
+      try {
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto: text })
+        });
+
+        if (!response.ok) {
+          const err = await response.text();
+          throw new Error(`HTTP ${response.status}: ${err}`);
+        }
+
+        const data = await response.json();
+        showLoading(false);
+
+        if (data.success === false) {
+          showError(data.error || 'Error desconocido en el servidor.');
+        } else {
+          showResult(data);
+        }
+      } catch (err) {
+        showLoading(false);
+        showError(err.message);
+      }
+    }
+
+    function downloadHTML() {
+      if (!lastResponse?.htmlOrden) return;
+      const blob = new Blob([lastResponse.htmlOrden], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const num = lastResponse.ordenDeCompra?.numero || 'orden';
+      a.href = url;
+      a.download = `${num}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadJSON() {
+      if (!lastResponse) return;
+      const blob = new Blob([JSON.stringify(lastResponse.ordenDeCompra || lastResponse, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const num = lastResponse.ordenDeCompra?.numero || 'orden';
+      a.href = url;
+      a.download = `${num}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function printOrden() {
+      if (!lastResponse?.htmlOrden) return;
+
+      // Abrir ventana nueva con el HTML de la OC y lanzar el diálogo de impresión
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      printWindow.document.write(lastResponse.htmlOrden);
+      printWindow.document.close();
+
+      // Esperar a que cargue y luego imprimir
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+
+      // Fallback por si onload ya se disparó
+      setTimeout(() => {
+        if (!printWindow.closed) {
+          printWindow.focus();
+          printWindow.print();
+        }
+      }, 500);
+    }
+  </script>
+</body>
+</html>

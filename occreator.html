@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador de Orden de Compra</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f4f8;
+      margin: 0; padding: 20px;
+      color: #333;
+    }
+    .container {
+      max-width: 90%;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #1a3a6b, #2d6be4);
+      color: white;
+      padding: 32px 40px;
+    }
+    .header h1 { margin: 0; font-size: 26px; }
+    .header p { margin: 8px 0 0; opacity: 0.85; font-size: 14px; }
+    .body { padding: 40px; }
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #e0e7ef;
+      margin-bottom: 28px;
+    }
+    .tab {
+      padding: 10px 24px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #6b7280;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+    .tab.active { color: #1a3a6b; border-bottom-color: #2d6be4; }
+    .tab:hover { color: #1a3a6b; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #374151;
+    }
+    input[type="text"], input[type="number"], input[type="date"], textarea, select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border 0.2s;
+      font-family: inherit;
+      background: white;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: #2d6be4;
+      box-shadow: 0 0 0 3px rgba(45, 107, 228, 0.1);
+    }
+    textarea { min-height: 180px; resize: vertical; }
+    .file-drop {
+      border: 2px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fafbfc;
+    }
+    .file-drop:hover, .file-drop.dragover { border-color: #2d6be4; background: #eff6ff; }
+    .file-drop .icon { font-size: 40px; margin-bottom: 10px; }
+    .file-drop p { margin: 4px 0; color: #6b7280; font-size: 14px; }
+    .file-drop .formats { font-size: 12px; color: #9ca3af; margin-top: 8px; }
+    input[type="file"] { display: none; }
+    .file-selected { background: #f0fdf4; border-color: #22c55e; color: #15803d; }
+    .btn {
+      background: linear-gradient(135deg, #1a3a6b, #2d6be4);
+      color: white;
+      border: none;
+      padding: 13px 32px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 20px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.92; }
+    .btn:active { transform: scale(0.99); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .settings {
+      background: #f8fafc;
+      border: 1px solid #e0e7ef;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .settings summary { font-weight: 600; cursor: pointer; color: #374151; }
+    .settings .field { margin-top: 12px; }
+    .loader { display: none; text-align: center; padding: 40px; color: #6b7280; }
+    .loader .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #e0e7ef;
+      border-top-color: #2d6be4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .result { display: none; margin-top: 24px; }
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .result-header h3 { margin: 0; color: #1a3a6b; }
+    .result-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .result-tab {
+      padding: 6px 16px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      background: white;
+    }
+    .result-tab.active { background: #1a3a6b; color: white; border-color: #1a3a6b; }
+    .result-panel { display: none; }
+    .result-panel.active { display: block; }
+    #result-html-view { border: 1px solid #e0e7ef; border-radius: 8px; overflow: hidden; }
+    #result-html-view iframe { width: 100%; min-height: 600px; border: none; }
+    #result-json-view {
+      background: #1e293b; color: #e2e8f0;
+      border-radius: 8px; padding: 20px;
+      overflow: auto; max-height: 500px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px; line-height: 1.6;
+    }
+    .error-box {
+      background: #fef2f2; border: 1px solid #fecaca;
+      color: #dc2626; border-radius: 8px;
+      padding: 16px; margin-top: 16px;
+    }
+    .success-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #f0fdf4; color: #15803d;
+      border: 1px solid #bbf7d0; border-radius: 999px;
+      padding: 4px 12px; font-size: 13px; font-weight: 600;
+    }
+    .action-btn {
+      padding: 8px 16px; border-radius: 6px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      margin-left: 6px; border: 2px solid;
+    }
+    .action-btn.outline { background: white; color: #1a3a6b; border-color: #1a3a6b; }
+    .action-btn.outline:hover { background: #eff6ff; }
+    .action-btn.solid { background: #1a3a6b; color: white; border-color: #1a3a6b; }
+    .action-btn.solid:hover { background: #14305a; }
+    .action-btn.warning { background: #f59e0b; color: white; border-color: #f59e0b; }
+    .action-btn.warning:hover { background: #d97706; }
+    .example-text {
+      font-size: 12px; color: #6b7280; margin-top: 6px;
+      padding: 8px 12px; background: #f9fafb;
+      border-radius: 6px; border-left: 3px solid #2d6be4;
+    }
+
+    /* ── EDITOR STYLES ── */
+    .edit-section {
+      background: #f8fafc;
+      border: 1px solid #e0e7ef;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .edit-section-title {
+      background: #1a3a6b;
+      color: white;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .edit-section-body { padding: 16px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+    }
+    .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .form-field label { margin-bottom: 4px; font-size: 12px; color: #6b7280; }
+    .form-field input, .form-field select, .form-field textarea {
+      padding: 8px 10px; font-size: 13px;
+    }
+    .form-field textarea { min-height: 60px; }
+
+    /* Items table editor */
+    .items-table-wrap { overflow-x: auto; }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 700px;
+    }
+    .items-table th {
+      background: #e8edf5; color: #374151;
+      padding: 8px 6px; text-align: left;
+      font-size: 11px; font-weight: 700;
+      border-bottom: 2px solid #d1d5db;
+    }
+    .items-table td { padding: 4px 4px; vertical-align: middle; }
+    .items-table tr:nth-child(even) td { background: #f8fafc; }
+    .items-table input {
+      padding: 6px 8px; font-size: 12px;
+      border-radius: 6px; border: 1.5px solid #d1d5db;
+    }
+    .items-table input:focus { border-color: #2d6be4; outline: none; }
+    .items-table input[type="number"] { text-align: right; }
+    .col-linea { width: 40px; }
+    .col-codigo { width: 80px; }
+    .col-desc { min-width: 160px; }
+    .col-qty { width: 70px; }
+    .col-unit { width: 60px; }
+    .col-price { width: 100px; }
+    .col-disc { width: 60px; }
+    .col-total { width: 100px; }
+    .col-del { width: 36px; }
+    .btn-remove-item {
+      background: #fee2e2; color: #dc2626;
+      border: none; border-radius: 6px;
+      width: 28px; height: 28px;
+      font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; line-height: 1;
+    }
+    .btn-remove-item:hover { background: #fca5a5; }
+    .btn-add-item {
+      background: #f0fdf4; color: #15803d;
+      border: 1.5px dashed #86efac;
+      border-radius: 8px; padding: 8px 16px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; margin-top: 10px;
+      width: 100%;
+    }
+    .btn-add-item:hover { background: #dcfce7; }
+
+    /* Totales editor */
+    .totals-editor {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+    .total-field { position: relative; }
+    .total-field label { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
+    .total-field input {
+      padding: 8px 10px; font-size: 13px;
+      border-radius: 6px; border: 1.5px solid #d1d5db;
+      text-align: right;
+    }
+    .total-field.highlight input {
+      background: #1a3a6b; color: white;
+      font-weight: 700; font-size: 15px;
+      border-color: #1a3a6b;
+    }
+    .recalc-note {
+      font-size: 11px; color: #9ca3af;
+      margin-top: 6px; font-style: italic;
+    }
+    .apply-btn {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white; border: none;
+      padding: 12px 32px; border-radius: 8px;
+      font-size: 15px; font-weight: 700;
+      cursor: pointer; width: 100%;
+      margin-top: 20px;
+    }
+    .apply-btn:hover { opacity: 0.9; }
+
+    /* ── AUTH OVERLAY ── */
+    #auth-overlay {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #0f2244, #1a3a6b, #2d6be4);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+    }
+    .auth-card {
+      background: white; border-radius: 16px;
+      padding: 48px 40px; text-align: center;
+      max-width: 420px; width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    .auth-logo { font-size: 52px; margin-bottom: 16px; }
+    .auth-card h2 { margin: 0 0 8px; color: #1a3a6b; font-size: 22px; }
+    .auth-card p { color: #6b7280; font-size: 14px; margin: 0 0 28px; }
+    .auth-domain-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+      border-radius: 999px; padding: 4px 14px; font-size: 13px;
+      font-weight: 600; margin-bottom: 28px;
+    }
+    #g-signin-btn { display: flex; justify-content: center; }
+    .auth-error {
+      margin-top: 16px; color: #dc2626;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 8px; padding: 10px 14px; font-size: 13px;
+      display: none;
+    }
+
+    /* ── USER BAR ── */
+    .user-bar {
+      display: flex; align-items: center; gap: 10px;
+      margin-top: 12px;
+    }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.6);
+    }
+    .user-name { font-size: 13px; opacity: 0.9; flex: 1; }
+    .btn-signout {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.4);
+      color: white; border-radius: 6px;
+      padding: 4px 12px; font-size: 12px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .btn-signout:hover { background: rgba(255,255,255,0.25); }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN OVERLAY -->
+  <div id="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-logo">🧾</div>
+      <h2>Generador de Orden de Compra</h2>
+      <p>Acceso exclusivo para colaboradores de Casa Marín</p>
+      <div class="auth-domain-badge">🔒 Solo cuentas @casamarin.cl</div>
+      <div id="g-signin-btn"></div>
+      <div class="auth-error" id="auth-error"></div>
+    </div>
+  </div>
+
+  <div class="container" id="app-container" style="display:none">
+    <div class="header">
+      <h1>🧾 Generador de Orden de Compra</h1>
+      <p>Sube un archivo (PDF, Excel, imagen) o ingresa texto con la información de la cotización</p>
+      <div class="user-bar" id="user-bar">
+        <img class="user-avatar" id="user-avatar" src="" alt="">
+        <span class="user-name" id="user-name"></span>
+        <button class="btn-signout" onclick="signOut()">Cerrar sesión</button>
+      </div>
+    </div>
+    <div class="body">
+
+      <details class="settings">
+        <summary>⚙️ Configuración del Webhook</summary>
+        <div class="field">
+          <label>URL del Webhook n8n</label>
+          <input type="text" id="webhook-url"
+            value="https://casamarin.app.n8n.cloud/webhook/orden-compra"
+            placeholder="https://casamarin.app.n8n.cloud/webhook/orden-compra">
+        </div>
+      </details>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('file', this)">📎 Subir Archivo</div>
+        <div class="tab" onclick="switchTab('text', this)">📝 Ingresar Texto</div>
+      </div>
+
+      <div id="panel-file" class="panel active">
+        <div class="file-drop" id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <div class="icon">📄</div>
+          <p><strong>Haz clic para seleccionar un archivo</strong></p>
+          <p>o arrastra y suelta aquí</p>
+          <div class="formats">PDF · Excel (.xlsx, .xls) · CSV · Imagen (JPG, PNG, etc.)</div>
+        </div>
+        <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.tiff">
+        <button class="btn" id="btn-file" onclick="generateFromFile()">Generar Orden de Compra</button>
+      </div>
+
+      <div id="panel-text" class="panel">
+        <label>Información de la cotización o pedido</label>
+        <textarea id="text-input" placeholder="Ingresa aquí los datos de la cotización. Por ejemplo:
+
+Proveedor: Tecnología Total SpA
+RUT: 76.543.210-K
+Dirección: Av. Providencia 1234, Santiago
+Contacto: contacto@tecnologiatotal.cl
+
+Productos:
+- 5 Laptops Dell Latitude 5540, $850.000 c/u
+- 10 Mouses Logitech M305, $25.000 c/u
+- 10 Teclados Logitech K380, $35.000 c/u
+
+Plazo de entrega: 7 días hábiles
+Condiciones de pago: 30 días
+Lugar de entrega: Nuestra bodega central
+Validez de la oferta: 15 días"></textarea>
+        <div class="example-text">
+          💡 Puedes ingresar la información en cualquier formato. La IA interpretará los datos automáticamente.
+        </div>
+        <button class="btn" id="btn-text" onclick="generateFromText()">Generar Orden de Compra</button>
+      </div>
+
+      <div class="loader" id="loader">
+        <div class="spinner"></div>
+        <p>Procesando documento y generando orden de compra...</p>
+        <p style="font-size:12px">La IA está analizando el contenido, esto puede tomar unos segundos.</p>
+      </div>
+
+      <!-- Resultado -->
+      <div class="result" id="result">
+        <div class="result-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <h3>Orden de Compra</h3>
+            <span class="success-badge" id="status-badge">✓ Generada</span>
+          </div>
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">
+            <button class="action-btn outline" onclick="downloadHTML()">⬇ HTML</button>
+            <button class="action-btn outline" onclick="downloadJSON()">⬇ JSON</button>
+            <button class="action-btn solid" onclick="printOrden()">🖨 Imprimir / PDF</button>
+          </div>
+        </div>
+
+        <div class="result-tabs">
+          <button class="result-tab active" onclick="switchResultTab('html', this)">📄 Vista Previa</button>
+          <button class="result-tab" onclick="switchResultTab('edit', this)">✏️ Editar</button>
+          <button class="result-tab" onclick="switchResultTab('json', this)">{ } JSON</button>
+        </div>
+
+        <!-- Vista previa -->
+        <div id="result-html-panel" class="result-panel active">
+          <div id="result-html-view">
+            <iframe id="html-frame" sandbox="allow-same-origin"></iframe>
+          </div>
+        </div>
+
+        <!-- Editor -->
+        <div id="result-edit-panel" class="result-panel">
+
+          <!-- Encabezado OC -->
+          <div class="edit-section">
+            <div class="edit-section-title">📋 DATOS DE LA ORDEN</div>
+            <div class="edit-section-body">
+              <div class="form-grid three">
+                <div class="form-field">
+                  <label>N° de Orden</label>
+                  <input type="text" id="e-numero">
+                </div>
+                <div class="form-field">
+                  <label>Fecha</label>
+                  <input type="date" id="e-fecha">
+                </div>
+                <div class="form-field">
+                  <label>Moneda</label>
+                  <select id="e-moneda">
+                    <option value="CLP">CLP (Peso Chileno)</option>
+                    <option value="USD">USD (Dólar)</option>
+                    <option value="EUR">EUR (Euro)</option>
+                    <option value="UF">UF</option>
+                    <option value="UTM">UTM</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Proveedor -->
+          <div class="edit-section">
+            <div class="edit-section-title">🏢 PROVEEDOR</div>
+            <div class="edit-section-body">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label>Nombre / Razón Social</label>
+                  <input type="text" id="e-prov-nombre">
+                </div>
+                <div class="form-field">
+                  <label>RUT</label>
+                  <input type="text" id="e-prov-rut">
+                </div>
+                <div class="form-field">
+                  <label>Dirección</label>
+                  <input type="text" id="e-prov-dir">
+                </div>
+                <div class="form-field">
+                  <label>Teléfono</label>
+                  <input type="text" id="e-prov-tel">
+                </div>
+                <div class="form-field">
+                  <label>Email</label>
+                  <input type="text" id="e-prov-email">
+                </div>
+                <div class="form-field">
+                  <label>Contacto</label>
+                  <input type="text" id="e-prov-contacto">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Comprador -->
+          <div class="edit-section">
+            <div class="edit-section-title">🏬 COMPRADOR</div>
+            <div class="edit-section-body">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label>Empresa</label>
+                  <input type="text" id="e-comp-empresa">
+                </div>
+                <div class="form-field">
+                  <label>Departamento</label>
+                  <input type="text" id="e-comp-depto">
+                </div>
+                <div class="form-field">
+                  <label>Solicitado por</label>
+                  <input type="text" id="e-comp-solicitante">
+                </div>
+                <div class="form-field">
+                  <label>Email</label>
+                  <input type="text" id="e-comp-email">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ítems -->
+          <div class="edit-section">
+            <div class="edit-section-title">📦 PRODUCTOS / SERVICIOS</div>
+            <div class="edit-section-body">
+              <div class="items-table-wrap">
+                <table class="items-table" id="items-table">
+                  <thead>
+                    <tr>
+                      <th class="col-linea">#</th>
+                      <th class="col-codigo">Código</th>
+                      <th class="col-desc">Descripción</th>
+                      <th class="col-qty">Cantidad</th>
+                      <th class="col-unit">Unidad</th>
+                      <th class="col-price">Precio Unit.</th>
+                      <th class="col-disc">Dcto. %</th>
+                      <th class="col-total">Total</th>
+                      <th class="col-del"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="items-tbody"></tbody>
+                </table>
+              </div>
+              <button class="btn-add-item" onclick="addItemRow()">+ Agregar ítem</button>
+            </div>
+          </div>
+
+          <!-- Totales -->
+          <div class="edit-section">
+            <div class="edit-section-title">💰 TOTALES</div>
+            <div class="edit-section-body">
+              <div class="totals-editor">
+                <div class="total-field">
+                  <label>Subtotal</label>
+                  <input type="number" id="e-subtotal" readonly style="background:#f3f4f6">
+                </div>
+                <div class="total-field">
+                  <label>Descuento Total</label>
+                  <input type="number" id="e-descuento" oninput="recalcTotals()">
+                </div>
+                <div class="total-field">
+                  <label>% IVA</label>
+                  <input type="number" id="e-pct-iva" value="19" oninput="recalcTotals()">
+                </div>
+                <div class="total-field">
+                  <label>IVA</label>
+                  <input type="number" id="e-iva" readonly style="background:#f3f4f6">
+                </div>
+                <div class="total-field highlight" style="grid-column: span 2">
+                  <label>TOTAL</label>
+                  <input type="number" id="e-total" readonly>
+                </div>
+              </div>
+              <p class="recalc-note">* Subtotal e IVA se recalculan automáticamente al editar los ítems.</p>
+            </div>
+          </div>
+
+          <!-- Condiciones -->
+          <div class="edit-section">
+            <div class="edit-section-title">📝 CONDICIONES Y NOTAS</div>
+            <div class="edit-section-body">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label>Condiciones de Pago</label>
+                  <input type="text" id="e-pago">
+                </div>
+                <div class="form-field">
+                  <label>Tiempo de Entrega</label>
+                  <input type="text" id="e-entrega">
+                </div>
+                <div class="form-field">
+                  <label>Lugar de Entrega</label>
+                  <input type="text" id="e-lugar">
+                </div>
+                <div class="form-field">
+                  <label>Validez de la Oferta</label>
+                  <input type="text" id="e-validez">
+                </div>
+                <div class="form-field full">
+                  <label>Notas adicionales</label>
+                  <textarea id="e-notas" style="min-height:70px"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="apply-btn" onclick="applyChanges()">✅ Aplicar Cambios y Actualizar Vista Previa</button>
+        </div>
+
+        <!-- JSON -->
+        <div id="result-json-panel" class="result-panel">
+          <pre id="result-json-view"></pre>
+        </div>
+      </div>
+
+      <div class="error-box" id="error-box" style="display:none">
+        <strong>Error:</strong> <span id="error-msg"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let lastResponse = null;
+
+    // ── Tabs ──────────────────────────────────────────────
+    function switchTab(tab, el) {
+      document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('panel-' + tab).classList.add('active');
+    }
+
+    function switchResultTab(tab, el) {
+      document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('result-' + tab + '-panel').classList.add('active');
+      if (tab === 'edit' && lastResponse) populateEditor(lastResponse.ordenDeCompra);
+    }
+
+    // ── Drag & Drop ───────────────────────────────────────
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) { fileInput.files = e.dataTransfer.files; updateDropZone(file); }
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) updateDropZone(fileInput.files[0]); });
+
+    function updateDropZone(file) {
+      const size = (file.size / 1024).toFixed(1);
+      dropZone.classList.add('file-selected');
+      dropZone.innerHTML = `
+        <div class="icon">✅</div>
+        <p><strong>${file.name}</strong></p>
+        <p style="font-size:12px;color:#15803d">${size} KB · Listo para procesar</p>
+        <div class="formats" style="margin-top:8px"><a href="#" onclick="clearFile(event)">Cambiar archivo</a></div>`;
+    }
+
+    function clearFile(e) {
+      e.stopPropagation();
+      fileInput.value = '';
+      dropZone.classList.remove('file-selected');
+      dropZone.innerHTML = `
+        <div class="icon">📄</div>
+        <p><strong>Haz clic para seleccionar un archivo</strong></p>
+        <p>o arrastra y suelta aquí</p>
+        <div class="formats">PDF · Excel (.xlsx, .xls) · CSV · Imagen (JPG, PNG, etc.)</div>`;
+    }
+
+    // ── Loading / Error / Result ──────────────────────────
+    function showLoading(show) {
+      document.getElementById('loader').style.display = show ? 'block' : 'none';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('error-box').style.display = 'none';
+      document.getElementById('btn-file').disabled = show;
+      document.getElementById('btn-text').disabled = show;
+    }
+
+    function showError(msg) {
+      document.getElementById('error-box').style.display = 'block';
+      document.getElementById('error-msg').textContent = msg;
+    }
+
+    function showResult(data) {
+      lastResponse = data;
+      document.getElementById('result').style.display = 'block';
+      document.getElementById('result-json-view').textContent =
+        JSON.stringify(data.ordenDeCompra || data, null, 2);
+      refreshPreview(data.htmlOrden);
+      // Reset to preview tab
+      document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('.result-tab').classList.add('active');
+      document.getElementById('result-html-panel').classList.add('active');
+    }
+
+    function refreshPreview(html) {
+      document.getElementById('html-frame').srcdoc = html || '<p>Sin contenido.</p>';
+    }
+
+    // ── Generate ──────────────────────────────────────────
+    async function generateFromFile() {
+      const file = fileInput.files[0];
+      if (!file) { showError('Por favor selecciona un archivo primero.'); return; }
+      const webhookUrl = document.getElementById('webhook-url').value.trim();
+      if (!webhookUrl) { showError('Por favor configura la URL del webhook.'); return; }
+      showLoading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(webhookUrl, { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        showLoading(false);
+        data.success === false ? showError(data.error || 'Error en el servidor.') : showResult(data);
+      } catch (err) { showLoading(false); showError(err.message); }
+    }
+
+    async function generateFromText() {
+      const text = document.getElementById('text-input').value.trim();
+      if (!text) { showError('Por favor ingresa el texto de la cotización.'); return; }
+      const webhookUrl = document.getElementById('webhook-url').value.trim();
+      if (!webhookUrl) { showError('Por favor configura la URL del webhook.'); return; }
+      showLoading(true);
+      try {
+        const res = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto: text })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        showLoading(false);
+        data.success === false ? showError(data.error || 'Error en el servidor.') : showResult(data);
+      } catch (err) { showLoading(false); showError(err.message); }
+    }
+
+    // ── Editor ────────────────────────────────────────────
+    function val(id, v) {
+      const el = document.getElementById(id);
+      if (v !== undefined) el.value = v ?? '';
+      else return el.value;
+    }
+
+    function populateEditor(oc) {
+      if (!oc) return;
+      val('e-numero', oc.numero);
+      val('e-fecha', oc.fecha);
+      val('e-moneda', oc.moneda || 'CLP');
+      val('e-prov-nombre', oc.proveedor?.nombre);
+      val('e-prov-rut',    oc.proveedor?.rut);
+      val('e-prov-dir',    oc.proveedor?.direccion);
+      val('e-prov-tel',    oc.proveedor?.telefono);
+      val('e-prov-email',  oc.proveedor?.email);
+      val('e-prov-contacto', oc.proveedor?.contacto);
+      val('e-comp-empresa',    oc.comprador?.empresa);
+      val('e-comp-depto',      oc.comprador?.departamento);
+      val('e-comp-solicitante',oc.comprador?.solicitadoPor);
+      val('e-comp-email',      oc.comprador?.email);
+      val('e-pago',    oc.condicionesPago);
+      val('e-entrega', oc.tiempoEntrega);
+      val('e-lugar',   oc.lugarEntrega);
+      val('e-validez', oc.validezOferta);
+      val('e-notas',   oc.notas);
+      val('e-descuento', oc.descuentoTotal || 0);
+      val('e-pct-iva', oc.porcentajeIva ?? 19);
+
+      // Render items
+      const tbody = document.getElementById('items-tbody');
+      tbody.innerHTML = '';
+      (oc.items || []).forEach(item => addItemRow(item));
+      recalcTotals();
+    }
+
+    function addItemRow(item = {}) {
+      const tbody = document.getElementById('items-tbody');
+      const rowNum = tbody.rows.length + 1;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="col-linea"><input type="number" value="${item.linea ?? rowNum}" style="width:60px;text-align:center"></td>
+        <td class="col-codigo"><input type="text" value="${item.codigo ?? ''}" style="width:72px"></td>
+        <td class="col-desc"><input type="text" class="item-desc" value="${escHtml(item.descripcion ?? '')}" style="width:100%"></td>
+        <td class="col-qty"><input type="number" class="item-qty" value="${item.cantidad ?? 1}" min="0" step="any" oninput="recalcRow(this)"></td>
+        <td class="col-unit"><input type="text" value="${item.unidad ?? 'UN'}" style="width:54px"></td>
+        <td class="col-price"><input type="number" class="item-price" value="${item.precioUnitario ?? 0}" min="0" step="any" oninput="recalcRow(this)"></td>
+        <td class="col-disc"><input type="number" class="item-disc" value="${item.descuento ?? 0}" min="0" max="100" step="any" oninput="recalcRow(this)"></td>
+        <td class="col-total"><input type="number" class="item-total" value="${item.total ?? 0}" readonly style="background:#f3f4f6"></td>
+        <td class="col-del"><button class="btn-remove-item" onclick="removeItemRow(this)" title="Eliminar">×</button></td>`;
+      tbody.appendChild(tr);
+      recalcTotals();
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function removeItemRow(btn) {
+      btn.closest('tr').remove();
+      recalcTotals();
+    }
+
+    function recalcRow(input) {
+      const tr = input.closest('tr');
+      const qty   = parseFloat(tr.querySelector('.item-qty').value)   || 0;
+      const price = parseFloat(tr.querySelector('.item-price').value) || 0;
+      const disc  = parseFloat(tr.querySelector('.item-disc').value)  || 0;
+      const total = qty * price * (1 - disc / 100);
+      tr.querySelector('.item-total').value = Math.round(total * 100) / 100;
+      recalcTotals();
+    }
+
+    function recalcTotals() {
+      let subtotal = 0;
+      document.querySelectorAll('#items-tbody .item-total').forEach(el => {
+        subtotal += parseFloat(el.value) || 0;
+      });
+      const descuento = parseFloat(val('e-descuento')) || 0;
+      const pctIva    = parseFloat(val('e-pct-iva'))   || 0;
+      const base  = subtotal - descuento;
+      const iva   = Math.round(base * pctIva / 100 * 100) / 100;
+      const total = Math.round((base + iva) * 100) / 100;
+      val('e-subtotal', Math.round(subtotal * 100) / 100);
+      val('e-iva',   iva);
+      val('e-total', total);
+    }
+
+    function readEditorData() {
+      const items = [];
+      document.querySelectorAll('#items-tbody tr').forEach((tr, i) => {
+        const inputs = tr.querySelectorAll('input');
+        items.push({
+          linea:         parseInt(inputs[0].value)   || i + 1,
+          codigo:        inputs[1].value,
+          descripcion:   inputs[2].value,
+          cantidad:      parseFloat(inputs[3].value) || 0,
+          unidad:        inputs[4].value || 'UN',
+          precioUnitario:parseFloat(inputs[5].value) || 0,
+          descuento:     parseFloat(inputs[6].value) || 0,
+          total:         parseFloat(inputs[7].value) || 0
+        });
+      });
+
+      return {
+        numero:          val('e-numero'),
+        fecha:           val('e-fecha'),
+        moneda:          val('e-moneda'),
+        proveedor: {
+          nombre:   val('e-prov-nombre'),
+          rut:      val('e-prov-rut'),
+          direccion:val('e-prov-dir'),
+          telefono: val('e-prov-tel'),
+          email:    val('e-prov-email'),
+          contacto: val('e-prov-contacto')
+        },
+        comprador: {
+          empresa:      val('e-comp-empresa'),
+          departamento: val('e-comp-depto'),
+          solicitadoPor:val('e-comp-solicitante'),
+          email:        val('e-comp-email')
+        },
+        items,
+        subtotal:       parseFloat(val('e-subtotal'))  || 0,
+        descuentoTotal: parseFloat(val('e-descuento')) || 0,
+        porcentajeIva:  parseFloat(val('e-pct-iva'))   || 0,
+        iva:            parseFloat(val('e-iva'))        || 0,
+        total:          parseFloat(val('e-total'))      || 0,
+        condicionesPago:val('e-pago'),
+        tiempoEntrega:  val('e-entrega'),
+        lugarEntrega:   val('e-lugar'),
+        validezOferta:  val('e-validez'),
+        notas:          val('e-notas')
+      };
+    }
+
+    function applyChanges() {
+      const oc = readEditorData();
+      const html = buildHTML(oc);
+      lastResponse.ordenDeCompra = oc;
+      lastResponse.htmlOrden = html;
+
+      // Actualizar JSON view
+      document.getElementById('result-json-view').textContent = JSON.stringify(oc, null, 2);
+
+      // Actualizar badge
+      document.getElementById('status-badge').textContent = '✓ Editada';
+
+      // Ir a la vista previa
+      refreshPreview(html);
+      document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('.result-tab').classList.add('active');
+      document.getElementById('result-html-panel').classList.add('active');
+    }
+
+    // ── HTML Builder ──────────────────────────────────────
+    function fmt(n) {
+      if (n == null) return '0';
+      return new Intl.NumberFormat('es-CL').format(n);
+    }
+
+    function buildHTML(oc) {
+      const itemsHTML = (oc.items || []).map((item, i) => `
+        <tr>
+          <td>${item.linea || i + 1}</td>
+          <td>${item.codigo || ''}</td>
+          <td>${item.descripcion || ''}</td>
+          <td style="text-align:center">${item.cantidad || 0}</td>
+          <td style="text-align:center">${item.unidad || 'UN'}</td>
+          <td style="text-align:right">${fmt(item.precioUnitario)}</td>
+          <td style="text-align:center">${item.descuento || 0}%</td>
+          <td style="text-align:right">${fmt(item.total)}</td>
+        </tr>`).join('');
+
+      return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Orden de Compra ${oc.numero || ''}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }
+    .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    .title { font-size: 24px; font-weight: bold; color: #1a3a6b; }
+    .oc-number { font-size: 18px; color: #1a3a6b; }
+    .section { margin-bottom: 16px; }
+    .section-title { font-size: 13px; font-weight: bold; background: #1a3a6b; color: white; padding: 4px 8px; margin-bottom: 8px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+    .info-row { display: flex; gap: 6px; }
+    .info-label { font-weight: bold; min-width: 120px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #1a3a6b; color: white; padding: 6px 8px; text-align: left; }
+    td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
+    tr:nth-child(even) { background: #f5f7fa; }
+    .totals { width: 300px; margin-left: auto; margin-top: 12px; }
+    .totals td { padding: 4px 8px; }
+    .totals .total-row { font-weight: bold; font-size: 14px; background: #1a3a6b; color: white; }
+    .footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .badge { display: inline-block; background: #e8f0fe; color: #1a3a6b; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+    @media print { body { margin: 10px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">ORDEN DE COMPRA</div>
+      <div class="oc-number">${oc.numero || 'N/A'}</div>
+      <div>Fecha: <strong>${oc.fecha || 'N/A'}</strong></div>
+    </div>
+    <div style="text-align:right">
+      <div>Moneda: <span class="badge">${oc.moneda || 'CLP'}</span></div>
+      ${oc.validezOferta ? `<div style="margin-top:4px">Validez: ${oc.validezOferta}</div>` : ''}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="section">
+      <div class="section-title">PROVEEDOR</div>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">Nombre:</span> ${oc.proveedor?.nombre || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">RUT:</span> ${oc.proveedor?.rut || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Dirección:</span> ${oc.proveedor?.direccion || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Teléfono:</span> ${oc.proveedor?.telefono || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Email:</span> ${oc.proveedor?.email || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Contacto:</span> ${oc.proveedor?.contacto || 'N/A'}</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">COMPRADOR</div>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">Empresa:</span> ${oc.comprador?.empresa || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Departamento:</span> ${oc.comprador?.departamento || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Solicitado por:</span> ${oc.comprador?.solicitadoPor || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Email:</span> ${oc.comprador?.email || 'N/A'}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">DETALLE DE PRODUCTOS / SERVICIOS</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Código</th><th>Descripción</th>
+          <th style="text-align:center">Cantidad</th><th style="text-align:center">Unidad</th>
+          <th style="text-align:right">Precio Unit.</th><th style="text-align:center">Dcto.</th>
+          <th style="text-align:right">Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemsHTML}</tbody>
+    </table>
+    <table class="totals">
+      <tr><td>Subtotal:</td><td style="text-align:right">${fmt(oc.subtotal)} ${oc.moneda || 'CLP'}</td></tr>
+      ${oc.descuentoTotal ? `<tr><td>Descuento:</td><td style="text-align:right">-${fmt(oc.descuentoTotal)} ${oc.moneda || 'CLP'}</td></tr>` : ''}
+      <tr><td>IVA (${oc.porcentajeIva || 0}%):</td><td style="text-align:right">${fmt(oc.iva)} ${oc.moneda || 'CLP'}</td></tr>
+      <tr class="total-row"><td>TOTAL:</td><td style="text-align:right">${fmt(oc.total)} ${oc.moneda || 'CLP'}</td></tr>
+    </table>
+  </div>
+
+  <div class="footer-grid">
+    <div class="section">
+      <div class="section-title">CONDICIONES</div>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">Pago:</span> ${oc.condicionesPago || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Entrega:</span> ${oc.tiempoEntrega || 'N/A'}</div>
+        <div class="info-row"><span class="info-label">Lugar entrega:</span> ${oc.lugarEntrega || 'N/A'}</div>
+      </div>
+    </div>
+    ${oc.notas ? `<div class="section"><div class="section-title">NOTAS</div><p>${oc.notas}</p></div>` : ''}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px">
+    <div style="text-align:center;border-top:1px solid #333;padding-top:8px">Firma Solicitante</div>
+    <div style="text-align:center;border-top:1px solid #333;padding-top:8px">Firma Autorización</div>
+  </div>
+</body>
+</html>`;
+    }
+
+    // ── Descargar / Imprimir ──────────────────────────────
+    function downloadHTML() {
+      if (!lastResponse?.htmlOrden) return;
+      const blob = new Blob([lastResponse.htmlOrden], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${lastResponse.ordenDeCompra?.numero || 'orden'}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadJSON() {
+      if (!lastResponse) return;
+      const blob = new Blob([JSON.stringify(lastResponse.ordenDeCompra || lastResponse, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${lastResponse.ordenDeCompra?.numero || 'orden'}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function printOrden() {
+      if (!lastResponse?.htmlOrden) return;
+      const w = window.open('', '_blank', 'width=900,height=700');
+      w.document.write(lastResponse.htmlOrden);
+      w.document.close();
+      w.onload = () => { w.focus(); w.print(); };
+      setTimeout(() => { if (!w.closed) { w.focus(); w.print(); } }, 500);
+    }
+
+    // ── GOOGLE AUTH ───────────────────────────────────────
+    const GOOGLE_CLIENT_ID = '554045132246-2nncs2mhg0p7lp0ta56vchfpu72cvqna.apps.googleusercontent.com';
+    const ALLOWED_DOMAIN   = 'casamarin.cl';
+
+    function initGoogleAuth() {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: false
+      });
+      google.accounts.id.renderButton(
+        document.getElementById('g-signin-btn'),
+        { theme: 'outline', size: 'large', text: 'signin_with', locale: 'es', width: 300 }
+      );
+
+      // Check existing session
+      const saved = sessionStorage.getItem('gauth_user');
+      if (saved) {
+        try { loginSuccess(JSON.parse(saved)); } catch { sessionStorage.removeItem('gauth_user'); }
+      }
+    }
+
+    function handleCredentialResponse(response) {
+      const payload = parseJwt(response.credential);
+      const email = payload.email || '';
+      if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
+        const err = document.getElementById('auth-error');
+        err.style.display = 'block';
+        err.textContent = `Acceso denegado. Solo se permiten cuentas @${ALLOWED_DOMAIN}. Tu cuenta: ${email}`;
+        google.accounts.id.disableAutoSelect();
+        return;
+      }
+      const user = { email, name: payload.name, picture: payload.picture };
+      sessionStorage.setItem('gauth_user', JSON.stringify(user));
+      loginSuccess(user);
+    }
+
+    function loginSuccess(user) {
+      document.getElementById('auth-overlay').style.display = 'none';
+      document.getElementById('app-container').style.display = 'block';
+      document.getElementById('user-name').textContent = user.name || user.email;
+      const avatar = document.getElementById('user-avatar');
+      if (user.picture) { avatar.src = user.picture; avatar.style.display = 'inline'; }
+      else { avatar.style.display = 'none'; }
+    }
+
+    function signOut() {
+      sessionStorage.removeItem('gauth_user');
+      google.accounts.id.disableAutoSelect();
+      document.getElementById('app-container').style.display = 'none';
+      document.getElementById('auth-overlay').style.display = 'flex';
+      document.getElementById('auth-error').style.display = 'none';
+    }
+
+    function parseJwt(token) {
+      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(base64));
+    }
+
+    // Init when GIS library is ready
+    window.addEventListener('load', () => {
+      if (typeof google !== 'undefined') initGoogleAuth();
+      else document.querySelector('script[src*="accounts.google.com"]')
+            .addEventListener('load', initGoogleAuth);
+    });
+  </script>
+</body>
+</html>
