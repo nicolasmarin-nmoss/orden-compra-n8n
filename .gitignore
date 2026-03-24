@@ -8,3 +8,6 @@ Thumbs.db
 
 # Make blueprint (contiene API keys)
 make_blueprint.json
+
+# Configuración local con credenciales (NO subir a GitHub)
+config.js
