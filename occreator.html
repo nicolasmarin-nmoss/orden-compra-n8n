@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Generador de Orden de Compra</title>
-  <script src="config.js"></script>
+  <script src="config.js?v=2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     * { box-sizing: border-box; }
@@ -1117,8 +1118,12 @@ Validez de la oferta: 15 días"></textarea>
 
         // Paso 2: subir HTML a Drive
         btn.textContent = '⏳ Guardando en Drive...';
-        const fileName = `OC-${oc.numero || 'sin-numero'}.html`;
-        const { fileId, webViewLink } = await uploadToDrive(token, fileName, lastResponse.htmlOrden);
+        const fileName = `${oc.numero || 'OC-sin-numero'}.pdf`;
+        const htmlContent = lastResponse.htmlOrden || buildHTML(oc);
+        btn.textContent = '⏳ Generando PDF...';
+        const pdfBlob = await generatePdfBlob(htmlContent, fileName);
+        btn.textContent = '⏳ Guardando en Drive...';
+        const { fileId, webViewLink } = await uploadToDrive(token, fileName, pdfBlob);
 
         // Paso 3: guardar en Airtable
         btn.textContent = '⏳ Registrando en Airtable...';
@@ -1132,7 +1137,7 @@ Validez de la oferta: 15 días"></textarea>
           CreadaAt:       ahora,
           ActualizadaAt:  ahora,
           MontoTotal:     oc.total || 0,
-          ArchivoNombre:  fileName,
+          ArchivoNombre:  fileName.replace('.html', ''),
           ArchivoUrl:     webViewLink,
           DriveFileId:    fileId,
           Comentario:     oc.notas || ''
@@ -1175,13 +1180,36 @@ Validez de la oferta: 15 días"></textarea>
       });
     }
 
-    async function uploadToDrive(token, fileName, htmlContent) {
-      const metadata = { name: fileName, mimeType: 'text/html', parents: [DRIVE_FOLDER_ID] };
+    async function generatePdfBlob(htmlContent, fileName) {
+      return new Promise((resolve, reject) => {
+        const container = document.createElement('div');
+        container.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;background:white';
+        container.innerHTML = htmlContent;
+        document.body.appendChild(container);
+        html2pdf().set({
+          margin: 10,
+          filename: fileName,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        }).from(container).outputPdf('blob').then(blob => {
+          document.body.removeChild(container);
+          resolve(blob);
+        }).catch(err => {
+          document.body.removeChild(container);
+          reject(err);
+        });
+      });
+    }
+
+    async function uploadToDrive(token, fileName, fileBlob) {
+      if (!DRIVE_FOLDER_ID) throw new Error(`DRIVE_FOLDER_ID no configurado. Revisa que config.js esté subido a Hostinger.`);
+      const metadata = { name: fileName, mimeType: 'application/pdf', parents: [DRIVE_FOLDER_ID] };
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file',     new Blob([htmlContent],             { type: 'text/html'        }));
+      form.append('file', fileBlob);
 
-      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: form
@@ -1193,7 +1221,7 @@ Validez de la oferta: 15 días"></textarea>
       const data = await res.json();
 
       // Dar acceso a cualquiera con el enlace
-      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions?supportsAllDrives=true`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: 'reader', type: 'anyone' })
