@@ -1112,7 +1112,7 @@ Validez de la oferta: 15 días"></textarea>
 
       const fields = {
         Descripcion:    `Orden de Compra ${oc.numero || ''} - ${oc.proveedor?.nombre || ''}`.trim(),
-        Estado:         'Pendiente',
+        Estado:         'PENDIENTE',
         SubmitterEmail: user.email || '',
         CreadaAt:       ahora,
         ActualizadaAt:  ahora,
@@ -1128,7 +1128,7 @@ Validez de la oferta: 15 días"></textarea>
             'Authorization': `Bearer ${AIRTABLE_TOKEN}`,
             'Content-Type':  'application/json'
           },
-          body: JSON.stringify({ fields })
+          body: JSON.stringify({ fields, typecast: true })
         });
 
         const data = await res.json();
