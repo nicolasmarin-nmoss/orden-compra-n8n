@@ -4,5 +4,6 @@ window.APP_CONFIG = {
   GOOGLE_CLIENT_ID: 'XXXXXXXXXX.apps.googleusercontent.com',
   AIRTABLE_TOKEN:   'patXXXXXXXXXXXXXXXX',
   AIRTABLE_BASE:    'appXXXXXXXXXX',
-  AIRTABLE_TABLE:   'Rendiciones'
+  AIRTABLE_TABLE:   'Rendiciones',
+  DRIVE_FOLDER_ID:  'XXXXXXXXXXXXXXXXX'
 };

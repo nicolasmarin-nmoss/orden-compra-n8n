@@ -1092,10 +1092,14 @@ Validez de la oferta: 15 días"></textarea>
       setTimeout(() => { if (!w.closed) { w.focus(); w.print(); } }, 500);
     }
 
-    // ── AIRTABLE PUBLISH ──────────────────────────────────
+    // ── AIRTABLE + DRIVE PUBLISH ──────────────────────────
     const AIRTABLE_TOKEN  = window.APP_CONFIG?.AIRTABLE_TOKEN  || '';
     const AIRTABLE_BASE   = window.APP_CONFIG?.AIRTABLE_BASE   || '';
     const AIRTABLE_TABLE  = window.APP_CONFIG?.AIRTABLE_TABLE  || 'Rendiciones';
+    const DRIVE_FOLDER_ID = window.APP_CONFIG?.DRIVE_FOLDER_ID || '';
+
+    let driveTokenClient  = null;
+    let driveAccessToken  = null;
 
     async function publicarOrden() {
       if (!lastResponse?.ordenDeCompra) return;
@@ -1104,33 +1108,41 @@ Validez de la oferta: 15 días"></textarea>
       const msg = document.getElementById('publish-msg');
 
       btn.disabled = true;
-      btn.textContent = '⏳ Publicando...';
+      btn.textContent = '⏳ Subiendo a Drive...';
       msg.style.display = 'none';
 
-      const user  = JSON.parse(sessionStorage.getItem('gauth_user') || '{}');
-      const ahora = new Date().toISOString();
-
-      const fields = {
-        Descripcion:    `Orden de Compra ${oc.numero || ''} - ${oc.proveedor?.nombre || ''}`.trim(),
-        Estado:         'PENDIENTE',
-        SubmitterEmail: user.email || '',
-        CreadaAt:       ahora,
-        ActualizadaAt:  ahora,
-        MontoTotal:     oc.total || 0,
-        ArchivoNombre:  `OC-${oc.numero || 'sin-numero'}.html`,
-        Comentario:     oc.notas || ''
-      };
-
       try {
+        // Paso 1: obtener token de Drive
+        const token = await getDriveToken();
+
+        // Paso 2: subir HTML a Drive
+        btn.textContent = '⏳ Guardando en Drive...';
+        const fileName = `OC-${oc.numero || 'sin-numero'}.html`;
+        const { fileId, webViewLink } = await uploadToDrive(token, fileName, lastResponse.htmlOrden);
+
+        // Paso 3: guardar en Airtable
+        btn.textContent = '⏳ Registrando en Airtable...';
+        const user  = JSON.parse(sessionStorage.getItem('gauth_user') || '{}');
+        const ahora = new Date().toISOString();
+
+        const fields = {
+          Descripcion:    `Orden de Compra ${oc.numero || ''} - ${oc.proveedor?.nombre || ''}`.trim(),
+          Estado:         'PENDIENTE',
+          SubmitterEmail: user.email || '',
+          CreadaAt:       ahora,
+          ActualizadaAt:  ahora,
+          MontoTotal:     oc.total || 0,
+          ArchivoNombre:  fileName,
+          ArchivoUrl:     webViewLink,
+          DriveFileId:    fileId,
+          Comentario:     oc.notas || ''
+        };
+
         const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${encodeURIComponent(AIRTABLE_TABLE)}`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${AIRTABLE_TOKEN}`,
-            'Content-Type':  'application/json'
-          },
+          headers: { 'Authorization': `Bearer ${AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fields, typecast: true })
         });
-
         const data = await res.json();
         if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
 
@@ -1139,7 +1151,7 @@ Validez de la oferta: 15 días"></textarea>
         btn.disabled      = true;
         msg.className     = 'publish-msg ok';
         msg.style.display = 'block';
-        msg.textContent   = `Orden publicada correctamente en Airtable (ID: ${data.id})`;
+        msg.innerHTML     = `Orden publicada correctamente. <a href="${webViewLink}" target="_blank">Ver en Drive</a>`;
         document.getElementById('status-badge').textContent = '✓ Publicada';
 
       } catch (err) {
@@ -1149,6 +1161,45 @@ Validez de la oferta: 15 días"></textarea>
         msg.style.display = 'block';
         msg.textContent   = `Error al publicar: ${err.message}`;
       }
+    }
+
+    function getDriveToken() {
+      return new Promise((resolve, reject) => {
+        if (driveAccessToken) { resolve(driveAccessToken); return; }
+        driveTokenClient.callback = (resp) => {
+          if (resp.error) { reject(new Error(resp.error)); return; }
+          driveAccessToken = resp.access_token;
+          resolve(driveAccessToken);
+        };
+        driveTokenClient.requestAccessToken({ prompt: '' });
+      });
+    }
+
+    async function uploadToDrive(token, fileName, htmlContent) {
+      const metadata = { name: fileName, mimeType: 'text/html', parents: [DRIVE_FOLDER_ID] };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file',     new Blob([htmlContent],             { type: 'text/html'        }));
+
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: form
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || `Drive HTTP ${res.status}`);
+      }
+      const data = await res.json();
+
+      // Dar acceso a cualquiera con el enlace
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'reader', type: 'anyone' })
+      });
+
+      return { fileId: data.id, webViewLink: data.webViewLink || `https://drive.google.com/file/d/${data.id}/view` };
     }
 
     // ── GOOGLE AUTH ───────────────────────────────────────
@@ -1166,6 +1217,13 @@ Validez de la oferta: 15 días"></textarea>
         document.getElementById('g-signin-btn'),
         { theme: 'outline', size: 'large', text: 'signin_with', locale: 'es', width: 300 }
       );
+
+      // Token client para Drive API
+      driveTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: () => {}
+      });
 
       // Check existing session
       const saved = sessionStorage.getItem('gauth_user');
@@ -1200,6 +1258,7 @@ Validez de la oferta: 15 días"></textarea>
 
     function signOut() {
       sessionStorage.removeItem('gauth_user');
+      driveAccessToken = null;
       google.accounts.id.disableAutoSelect();
       document.getElementById('app-container').style.display = 'none';
       document.getElementById('auth-overlay').style.display = 'flex';
